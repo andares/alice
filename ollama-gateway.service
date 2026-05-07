@@ -1,5 +1,5 @@
 [Unit]
-Description=Ollawe - Ollama Gateway
+Description=Alice Way for LLM Portal
 After=network.target
 
 [Service]

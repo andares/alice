@@ -1,8 +1,8 @@
-# Ollawe
+# Alice Way
 
 > A lightweight, production-ready **Ollama Gateway** with OpenAI-compatible API.
 
-**Ollawe** exposes your local [Ollama](https://ollama.com) instance through a secure, OpenAI-compatible HTTP API. Any client that supports the OpenAI API — Claude CLI, LangChain, Continue.dev, ChatGPT-Next-Web, etc. — can connect to your self-hosted models without exposing Ollama's native port (11434) directly.
+**Alice Way** exposes your local [Ollama](https://ollama.com) instance through a secure, OpenAI-compatible HTTP API. Any client that supports the OpenAI API — Claude CLI, LangChain, Continue.dev, ChatGPT-Next-Web, etc. — can connect to your self-hosted models without exposing Ollama's native port (11434) directly.
 
 ---
 
@@ -156,7 +156,7 @@ sudo tail -f /var/log/alice-way/gateway.log
 
 ## Testing
 
-Ollawe uses Bun's built-in test runner (`bun:test`). All tests live in the `tests/` directory, separated from source code.
+Alice Way uses Bun's built-in test runner (`bun:test`). All tests live in the `tests/` directory, separated from source code.
 
 ### Run All Tests
 
@@ -198,18 +198,18 @@ bun test tests/unit/transformers/openai.test.ts
 ## Architecture
 
 ```
-Client (OpenAI API) → HTTPS → Ollawe (port 3000) → Ollama (port 11434)
+Client (OpenAI API) → HTTPS → Alice (port 3000) → Ollama (port 11434)
 ```
 
 Typical production setup with reverse proxy:
 
 ```
-Internet → Nginx/Caddy (HTTPS, 443) → Ollawe (3000, localhost) → Ollama (11434)
+Internet → Nginx/Caddy (HTTPS, 443) → Alice (3000, localhost) → Ollama (11434)
 ```
 
 ### Admin Dashboard (/alice)
 
-Ollawe includes a built-in admin dashboard at `/alice` for operational visibility:
+Alice includes a built-in admin dashboard at `/alice` for operational visibility:
 
 - **Status page** — Ollama health check and loaded models
 - **Config page** — Read-only view of current configuration (API key masked)

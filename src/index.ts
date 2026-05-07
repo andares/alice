@@ -96,12 +96,12 @@ const app = new Elysia()
   .listen(config.port);
 
 // 启动日志
-logger.info(`Ollawe Gateway started`, {
+logger.info(`Alice Way started`, {
   port: config.port,
   ollamaUrl: config.ollamaUrl,
   logLevel: config.logLevel,
 });
-console.log(`🦊 Ollawe is running at ${app.server?.hostname}:${app.server?.port}`);
+console.log(`🦊 Alice Way is running at ${app.server?.hostname}:${app.server?.port}`);
 
 // 优雅关闭
 async function shutdown(signal: string) {

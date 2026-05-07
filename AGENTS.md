@@ -2,13 +2,13 @@
 
 ## 项目概况
 
-**Ollawe** 是一个基于 **Bun** 运行时和 **ElysiaJS** 框架的 **Ollama Gateway** 服务。
+**Alice Way** 是一个基于 **Bun** 运行时和 **ElysiaJS** 框架的 **LLM Portal** 服务，其中包括了对`Ollama`转发`Open AI API`的支持。
 
-**核心目标**：安全暴露内网 Ollama 服务到公网，提供 OpenAI 兼容的 API 接口，避免直接暴露 Ollama 原生端口（11434）。任何支持 OpenAI API 的客户端（如 Claude CLI、LangChain、Continue 等）均可直接接入。
+**包括目标**：安全暴露内网 Ollama 服务到公网，提供 OpenAI 兼容的 API 接口，避免直接暴露 Ollama 原生端口（11434）。任何支持 OpenAI API 的客户端（如 Claude CLI、LangChain、Continue 等）均可直接接入。
 
 **典型部署架构**：
 ```
-客户端 → HTTPS + API Key → 公网 VPS(Ollawe:3000) → frp 内网穿透 → 内网 Ollama(11434)
+客户端 → HTTPS + API Key → 公网 VPS(Alice:3000) → frp 内网穿透 → 内网 Ollama(11434)
 ```
 
 **核心特性**：
