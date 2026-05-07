@@ -1,0 +1,30 @@
+{
+  "name": "@andares/alice",
+  "version": "1.0.50",
+  "scripts": {
+    "test": "bun test",
+    "test:unit": "bun test tests/unit",
+    "test:integration": "bun test tests/integration",
+    "test:coverage": "bun test --coverage",
+    "test:watch": "bun test --watch",
+    "dev": "bun run --watch src/index.ts",
+    "build:css": "cd \"$(dirname \"$npm_package_json\")\" && ${BUN_INSTALL:-$HOME/.bun}/bin/bunx --bun @tailwindcss/cli -i src/alice/styles.css -o public/alice.css"
+  },
+  "dependencies": {
+    "@elysiajs/bearer": "^1.4.3",
+    "@elysiajs/cors": "^1.4.1",
+    "@elysiajs/html": "^1.4.0",
+    "@elysiajs/static": "^1.4.9",
+    "@kitajs/html": "^4.2.13",
+    "elysia": "latest",
+    "htmx.org": "^2.0.10",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.2.4",
+    "bun-types": "latest",
+    "daisyui": "^5.5.19",
+    "tailwindcss": "^4.2.4"
+  },
+  "module": "src/index.js"
+}
