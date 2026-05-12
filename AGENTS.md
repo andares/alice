@@ -32,7 +32,8 @@
 |------|------|
 | `bun install` | 安装依赖 |
 | `bun run dev` | 启动开发服务器（`bun run --watch src/index.ts`） |
-| `bun run src/index.ts` | 直接运行 |
+| `bun run start` | 生产启动（`bun run src/index.ts`） |
+| `bun run test:e2e` | E2E 测试（`playwright test tests/e2e`） |
 
 开发服务器默认监听 **3000** 端口。
 
@@ -51,10 +52,29 @@ src/
   services/
     ollama.ts           # Ollama HTTP 客户端（超时、健康检查、模型别名）
     logger-db.ts        # SQLite logging service（init, insert, query）
+    chat-db.ts          # Chat session/message SQLite service
+    router/             # Router-related services
   transformers/
     openai.ts           # OpenAI ↔ Ollama 格式转换（含 SSE 流式）
   routes/
     v1.ts               # /v1/chat/completions + /v1/models 路由
+    auth.ts             # 认证相关路由（登录、登出、会话管理）
+    chat.ts             # Chat 功能路由（对话管理、消息历史）
+    router.ts           # 路由聚合与分发
+  foundation/           # 基础模块（认证、用户、密钥、加密等）
+    auth.ts             # 认证核心逻辑
+    users.ts            # 用户管理
+    administrators.ts   # 管理员管理
+    assistors.ts        # 助手管理
+    api-keys.ts         # API 密钥管理
+    crypto.ts           # 加密工具
+    csrf.ts             # CSRF 防护
+    db.ts               # 数据库连接与配置
+    router-models.ts    # Router 数据模型
+    migrations.ts       # 数据库迁移
+    bootstrap.ts        # 应用引导
+    elysia-auth.ts      # Elysia 认证集成
+    types.ts            # 基础类型定义
   alice/                # Alice admin dashboard
     layout.tsx          # Shared layout（sidebar + content）
     routes.ts           # /alice route handlers + static plugin
@@ -81,10 +101,59 @@ src/
 ## Agent 注意事项
 
 - **必须使用 `bun` 而非 `npm`/`pnpm`/`yarn`**：所有脚本执行、包安装、运行都通过 Bun。
-- **无测试框架**：`package.json` 中的 `test` 脚本为占位符，尚未配置测试工具。
+- **测试框架**：使用 `bun:test` 运行单元测试，使用 `playwright` 运行 E2E 测试。
 - **无 Lint/Format 工具**：没有 ESLint、Prettier 等配置，不要假设存在。
-- **极小项目**：目前只有一个入口文件。新增功能时直接在 `src/` 下扩展即可，无需复杂目录结构。
 - **Bun 运行时特性**：Bun 内置了 TypeScript 支持，无需额外编译步骤即可直接运行 `.ts` 文件。
+- **遇到不熟悉的 API/库时，积极使用搜索工具查文档，禁止瞎猜**：优先用 context7、firecrawl-search 等工具查官方文档，不确定的行为通过搜索验证后再实现。
+
+## Bun 优先原则
+
+**所有服务端 TypeScript 实现必须基于 Bun 运行时，优先使用 Bun 原生 API；客户端 SolidStart 部分也必须基于 Bun 工具链进行开发。**
+
+### 服务端（ElysiaJS）Bun API 使用规范
+
+| 场景 | 必须使用 | 禁止使用 |
+|------|---------|----------|
+| HTTP 请求 | Bun 内置 `fetch` | Node.js `http`/`https` 模块 |
+| 文件读取 | `Bun.file()` | `fs.readFileSync()` |
+| 文件写入 | `Bun.write()` 或 `Bun.file().writer()` | `fs.writeFileSync()` |
+| SQLite | `bun:sqlite` (`Database` 类) | `better-sqlite3`、`sqlite3` 等其他库 |
+| 密码哈希 | `Bun.password.hash()` / `Bun.password.verify()` | `bcryptjs`、`argon2` 等外部库（bcrypt 格式天然支持） |
+| 加密/JWT | `crypto.subtle`（Web Crypto API） | `jsonwebtoken`、`jose` 等外部 JWT 库 |
+| UUID/随机值 | `crypto.randomUUID()` | `uuid` 库 |
+| 文件路径 | `import { join, dirname } from 'node:path'` | `path-browserify` 等替代品 |
+| 流处理 | `ReadableStream` + `WritableStream`（Web 标准） | Node.js `Stream` API |
+| 进程环境 | `Bun.env`、`process.env` | 无限制 |
+| 子进程 | `Bun.spawn()` / `Bun.spawnSync()` | Node.js `child_process`（除非 Bun API 不支持的功能） |
+
+### 客户端（SolidStart）构建工具链规范
+
+| 场景 | 必须使用 | 禁止使用 |
+|------|---------|----------|
+| 包管理 | `bun install`、`bun add`、`bun remove` | `npm`/`pnpm`/`yarn` |
+| 脚本执行 | `bunx --bun <command>`（如 `bunx --bun vinxi build`） | `npx`、`pnpm dlx` |
+| 开发服务器 | `bun run dev`（内部调用 vinxi） | `npm run dev` |
+| 生产构建 | `bun run build`（内部调用 vinxi） | `npm run build` |
+| TypeScript | Bun 内置 TS 编译 | `tsc` 命令行（仅用于类型检查 `--noEmit`） |
+| CSS 构建 | `bunx --bun @tailwindcss/cli` | Node.js 版本的 Tailwind CLI |
+
+### 运行时检测
+
+在需要区分运行时的场景，使用以下模式：
+
+```typescript
+// 检测 Bun 运行时
+if (typeof Bun !== 'undefined') {
+  // Bun 专属代码路径
+}
+```
+
+### 为什么用 Bun 原生 API
+
+- **零外部依赖**：`Bun.password`、`bun:sqlite`、`Bun.file()` 等均内置，减少依赖树体积
+- **启动速度**：Bun 原生 API 经过深度优化，比 Node.js 生态库快 4-10x
+- **编译友好**：编译为单二进制时，Bun 内置 API 自动打包，外部库可能有时不兼容
+- **一致性**：统一使用 Bun API 确保开发、测试、编译、部署各阶段行为一致
 
 ## Elysia 生命周期关键知识
 
@@ -102,6 +171,9 @@ src/
 | `build.sh` | 编译为独立二进制（`bun build --compile`） |
 | `install.sh` | 安装为 systemd 服务（需 root） |
 | `ollama-gateway.service` | systemd 服务模板 |
+| `Dockerfile` | 多阶段构建镜像 |
+| `.dockerignore` | 构建排除规则 |
+| `docker-compose.yml` | Docker 容器编排 |
 
 ## Alice Dashboard 说明
 
@@ -130,6 +202,36 @@ src/
 - 命令行输出使用英文
 - 复杂任务需在 `.implementations/` 目录下创建方案文档
 
+## es-toolkit 优先
+
+本项目已安装 [es-toolkit](https://es-toolkit.dev/)，所有通用工具函数应优先使用 es-toolkit 提供的能力。
+
+### 使用原则
+
+- **数组/对象/字符串/函数操作优先使用 es-toolkit**，如 `pick`、`omit`、`debounce`、`throttle`、`cloneDeep`、`uniq`、`groupBy`、`sortBy`、`chunk`、`sample`、`random`、`capitalize`、`camelCase` 等
+- **禁止重复造轮子**：不得手写 debounce、pick、omit、throttle 等已有 es-toolkit 提供的函数
+- **禁止引入其他工具库**：不得引入 lodash、underscore、ramda 等其他工具库，es-toolkit 已覆盖绝大部分场景
+
+### 导入方式
+
+```typescript
+import { debounce, pick, omit, groupBy, cloneDeep } from 'es-toolkit'
+```
+
+按需导入，支持 tree-shaking。详细 API 参考：https://es-toolkit.dev/reference/
+
+### es-toolkit 不覆盖的场景
+
+某些领域专用函数不属于 es-toolkit 范畴，**不需要**用 es-toolkit 替代：
+- Zod schema 定义与校验（`z.object()`, `z.string()` 等）
+- Elysia 框架生命周期函数
+- Bun 运行时 API（`Bun.file()`, `Bun.write()` 等）
+
 ## Implementations
 
 - [Alice Dashboard](.implementations/alice-dashboard.md) — 后台管理面板实施方案
+- [T10 ChatArea](.implementations/T10-chat-area.md) — ChatArea 基础组件实施方案
+- [Alice Chat](.implementations/chat.md) — /chat 功能完整实施方案
+- [T13 MessageBubble](.implementations/T13-message-bubble.md) — 消息气泡组件实施方案
+- [T35-T36 Assistor Selector](.implementations/T35-T36-assistor-selector.md) — Assistor 选择器 + 提示词注入实施方案
+- [Wave 8-9 管理面板+清理](.implementations/wave8-9-cleanup.md) — Alice 管理面板认证/CRUD + 代码质量检查

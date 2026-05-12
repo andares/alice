@@ -154,6 +154,55 @@ sudo tail -f /var/log/alice-way/gateway.log
 
 ---
 
+## Deploy with Docker
+
+### Prerequisites
+
+- Docker (>= 20.10)
+- Docker Compose (>= 2.0)
+
+### 1. Configure
+
+Copy the example config and edit the API key:
+
+```bash
+cp config.example.json config.json
+# Edit config.json and set a strong apiKey
+```
+
+### 2. Start
+
+```bash
+docker compose up -d
+```
+
+The gateway will be available at `http://localhost:3000`.
+
+### 3. View Logs
+
+```bash
+docker compose logs -f
+```
+
+### 4. Stop
+
+```bash
+docker compose down
+```
+
+### Data Persistence
+
+Docker volumes persist data across container restarts:
+
+| Volume | Host Path | Container Path | Purpose |
+|--------|-----------|----------------|---------|
+| `./data` | `./data` | `/app/.data` | SQLite database for request logs |
+| `./logs` | `./logs` | `/app/.log` | Application log files |
+
+To persist data on a different host path, edit `docker-compose.yml` and modify the volume mappings.
+
+---
+
 ## Testing
 
 Alice Way uses Bun's built-in test runner (`bun:test`). All tests live in the `tests/` directory, separated from source code.
@@ -184,6 +233,14 @@ bun test tests/integration
 # Single file
 bun test tests/unit/transformers/openai.test.ts
 ```
+
+### Run E2E Tests
+
+```bash
+bun run test:e2e
+```
+
+Runs Playwright end-to-end tests against the running application.
 
 ### Test Structure
 
