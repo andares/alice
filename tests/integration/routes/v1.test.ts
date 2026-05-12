@@ -1,4 +1,5 @@
-import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, mock, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
+import { Database } from 'bun:sqlite';
 import { mockConfig } from '../../fixtures/config.mock';
 import {
   ollamaChatResponse,
@@ -6,6 +7,7 @@ import {
   ollamaStreamChunks,
 } from '../../fixtures/ollama-responses';
 import { createChatCompletionRequest } from '../../fixtures/request-factories';
+import { hashPassword } from '../../../src/foundation/crypto';
 
 const testLogger = {
   info: mock(() => {}),
@@ -26,10 +28,19 @@ mock.module('../../../src/utils/logger', () => ({
   setDefaultLogger: mock(() => {}),
 }));
 
-import { v1Routes } from '../../../src/routes/v1';
+import { createV1Routes } from '../../../src/routes/v1';
 import { OllamaError } from '../../../src/services/ollama';
 
+/** 创建满足 Bun typeof fetch 类型（含 preconnect）的 mock fetch */
+function mockFetch(impl: () => Promise<Response>): typeof fetch {
+  const m = mock(impl);
+  return Object.assign(m, { preconnect() {} }) as typeof fetch;
+}
+
 const originalFetch = globalThis.fetch;
+
+let db: Database;
+let app: ReturnType<typeof createV1Routes>;
 
 function authHeaders(extra?: Record<string, string>): Record<string, string> {
   return {
@@ -73,10 +84,45 @@ function createOllamaStreamResponse(): Response {
   });
 }
 
-beforeEach(() => {
-  globalThis.fetch = mock(() =>
-    Promise.resolve(new Response('', { status: 200 })),
-  );
+beforeAll(async () => {
+  db = new Database(':memory:');
+  db.run('PRAGMA journal_mode = WAL');
+  db.run(`
+    CREATE TABLE IF NOT EXISTS api_keys (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      key_hash TEXT NOT NULL,
+      key_prefix TEXT NOT NULL,
+      description TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      is_active INTEGER NOT NULL DEFAULT 1
+    )
+  `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS router_models (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT UNIQUE NOT NULL,
+      variant TEXT NOT NULL DEFAULT 'openai',
+      base_url TEXT NOT NULL,
+      model TEXT NOT NULL,
+      api_key TEXT,
+      options TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    )
+  `);
+  const keyHash = await hashPassword(mockConfig.apiKey);
+  db.prepare(
+    'INSERT INTO api_keys (key_hash, key_prefix, description) VALUES (?, ?, ?)',
+  ).run(keyHash, mockConfig.apiKey.slice(0, 7), 'test key');
+  // 插入默认 Ollama 路由（测试用）
+  db.prepare(
+    "INSERT INTO router_models (name, variant, base_url, model, api_key) VALUES ('__default__', 'ollama', ?, '', NULL)",
+  ).run(mockConfig.ollamaUrl);
+  app = createV1Routes(db);
+});
+
+afterAll(() => {
+  db?.close();
 });
 
 afterEach(() => {
@@ -84,20 +130,26 @@ afterEach(() => {
 });
 
 describe('POST /v1/chat/completions', () => {
+  beforeEach(() => {
+    globalThis.fetch = mockFetch(() =>
+      Promise.resolve(new Response('', { status: 200 })),
+    );
+  });
+
   it('should return 401 when no Authorization header is provided', async () => {
-    const res = await v1Routes.handle(
+    const res = await app.handle(
       chatRequest({}, { 'Content-Type': 'application/json' }),
     );
 
     expect(res.status).toBe(401);
     const body = await res.json();
     expect(body.error.message).toBe('Invalid API Key');
-    expect(body.error.type).toBe('authentication_error');
+    expect(body.error.type).toBe('invalid_request_error');
     expect(body.error.code).toBe('invalid_api_key');
   });
 
   it('should return 401 when wrong API key is provided', async () => {
-    const res = await v1Routes.handle(
+    const res = await app.handle(
       chatRequest(
         {},
         {
@@ -114,7 +166,7 @@ describe('POST /v1/chat/completions', () => {
   });
 
   it('should include WWW-Authenticate header on 401 response', async () => {
-    const res = await v1Routes.handle(
+    const res = await app.handle(
       chatRequest({}, { 'Content-Type': 'application/json' }),
     );
 
@@ -123,7 +175,7 @@ describe('POST /v1/chat/completions', () => {
   });
 
   it('should return 200 with chat completion for valid non-streaming request', async () => {
-    globalThis.fetch = mock(() =>
+    globalThis.fetch = mockFetch(() =>
       Promise.resolve(
         new Response(JSON.stringify(ollamaChatResponse), {
           status: 200,
@@ -132,7 +184,7 @@ describe('POST /v1/chat/completions', () => {
       ),
     );
 
-    const res = await v1Routes.handle(chatRequest());
+    const res = await app.handle(chatRequest());
 
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -149,9 +201,9 @@ describe('POST /v1/chat/completions', () => {
   });
 
   it('should return streaming SSE response when stream is true', async () => {
-    globalThis.fetch = mock(() => Promise.resolve(createOllamaStreamResponse()));
+    globalThis.fetch = mockFetch(() => Promise.resolve(createOllamaStreamResponse()));
 
-    const res = await v1Routes.handle(chatRequest({ stream: true }));
+    const res = await app.handle(chatRequest({ stream: true }));
 
     expect(res.status).toBe(200);
     expect(res.headers.get('Content-Type')).toBe('text/event-stream');
@@ -165,9 +217,9 @@ describe('POST /v1/chat/completions', () => {
   it('should return 504 when Ollama times out', async () => {
     const timeoutError = new Error('The operation was aborted due to timeout');
     timeoutError.name = 'TimeoutError';
-    globalThis.fetch = mock(() => Promise.reject(timeoutError));
+    globalThis.fetch = mockFetch(() => Promise.reject(timeoutError));
 
-    const res = await v1Routes.handle(chatRequest());
+    const res = await app.handle(chatRequest());
 
     expect(res.status).toBe(504);
     const body = await res.json();
@@ -176,40 +228,46 @@ describe('POST /v1/chat/completions', () => {
     expect(body.error.code).toBe('timeout');
   });
 
-  it('should return 502 when Ollama connection fails', async () => {
-    globalThis.fetch = mock(() =>
+it('should return 502 when Ollama connection fails', async () => {
+    globalThis.fetch = mockFetch(() =>
       Promise.reject(new Error('Connection refused')),
     );
 
-    const res = await v1Routes.handle(chatRequest());
+    const res = await app.handle(chatRequest());
 
     expect(res.status).toBe(502);
     const body = await res.json();
-    expect(body.error.message).toBe('Upstream service error');
+    expect(body.error.message).toBe('Upstream connection failed: Connection refused');
     expect(body.error.type).toBe('upstream_error');
     expect(body.error.code).toBe('upstream_failure');
   });
 
-  it('should return 500 when Ollama returns other HTTP error', async () => {
-    globalThis.fetch = mock(() =>
+  it('should return upstream error when Ollama returns HTTP error', async () => {
+    globalThis.fetch = mockFetch(() =>
       Promise.resolve(
         new Response('model not found', { status: 404, statusText: 'Not Found' }),
       ),
     );
 
-    const res = await v1Routes.handle(chatRequest());
+    const res = await app.handle(chatRequest());
 
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(404);
     const body = await res.json();
-    expect(body.error.message).toBe('Internal server error');
-    expect(body.error.type).toBe('internal_error');
-    expect(body.error.code).toBe('internal_error');
+    expect(body.error.message).toBe('Ollama error: 404 Not Found');
+    expect(body.error.type).toBe('upstream_error');
+    expect(body.error.code).toBe('upstream_failure');
   });
 });
 
 describe('GET /v1/models', () => {
+  beforeEach(() => {
+    globalThis.fetch = mockFetch(() =>
+      Promise.resolve(new Response('', { status: 200 })),
+    );
+  });
+
   it('should return 401 when no Authorization header is provided', async () => {
-    const res = await v1Routes.handle(
+    const res = await app.handle(
       new Request('http://localhost/v1/models'),
     );
 
@@ -220,7 +278,7 @@ describe('GET /v1/models', () => {
   });
 
   it('should return model list for valid authenticated request', async () => {
-    globalThis.fetch = mock(() =>
+    globalThis.fetch = mockFetch(() =>
       Promise.resolve(
         new Response(JSON.stringify(ollamaTagsResponse), {
           status: 200,
@@ -229,7 +287,7 @@ describe('GET /v1/models', () => {
       ),
     );
 
-    const res = await v1Routes.handle(modelsRequest());
+    const res = await app.handle(modelsRequest());
 
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -241,29 +299,30 @@ describe('GET /v1/models', () => {
     expect(body.data[1].id).toBe('qwen2.5:7b');
   });
 
-  it('should return 502 when Ollama returns connection error', async () => {
-    globalThis.fetch = mock(() =>
+it('should return router models only when Ollama is unreachable', async () => {
+    globalThis.fetch = mockFetch(() =>
       Promise.reject(new Error('ECONNREFUSED')),
     );
 
-    const res = await v1Routes.handle(modelsRequest());
+    const res = await app.handle(modelsRequest());
 
-    expect(res.status).toBe(502);
+    expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.error.message).toBe('Upstream service error');
-    expect(body.error.code).toBe('upstream_failure');
+    expect(body.object).toBe('list');
+    // __default__ 被过滤，Ollama 不可达时只返回 router models（此处为空）
+    expect(body.data).toHaveLength(0);
   });
 
-  it('should return 504 when Ollama times out on models endpoint', async () => {
+  it('should return router models only when Ollama times out', async () => {
     const timeoutError = new Error('The operation was aborted due to timeout');
     timeoutError.name = 'TimeoutError';
-    globalThis.fetch = mock(() => Promise.reject(timeoutError));
+    globalThis.fetch = mockFetch(() => Promise.reject(timeoutError));
 
-    const res = await v1Routes.handle(modelsRequest());
+    const res = await app.handle(modelsRequest());
 
-    expect(res.status).toBe(504);
+    expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.error.message).toBe('Upstream request timed out');
-    expect(body.error.code).toBe('timeout');
+    expect(body.object).toBe('list');
+    expect(body.data).toHaveLength(0);
   });
 });
