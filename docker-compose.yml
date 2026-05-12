@@ -1,0 +1,18 @@
+services:
+  alice-way:
+    build: .
+    container_name: alice-way
+    ports:
+      - "3000:3000"
+    environment:
+      CONFIG_PATH: /app/config.json
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - ./data:/app/.data
+      - ./logs:/app/.log
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

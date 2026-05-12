@@ -1,0 +1,46 @@
+# 依赖（构建阶段重新安装）
+node_modules
+src/chat/node_modules
+
+# Git
+.git
+.gitignore
+
+# 测试
+tests/
+
+# 日志
+*.log
+
+# 数据目录
+.data/
+
+# Chat 前端构建产物（构建阶段重新生成）
+public/chat/
+
+# 编译产物
+ollama-gateway
+
+# IDE / 编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile
+.dockerignore
+
+# 实施方案
+.implementations/
+
+# Sisyphus
+.sisyphus/
+
+# 临时文件
+tmp/
+temp/
