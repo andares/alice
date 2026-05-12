@@ -7,20 +7,26 @@
     "test:integration": "bun test tests/integration",
     "test:coverage": "bun test --coverage",
     "test:watch": "bun test --watch",
+    "start": "bun run src/index.ts",
     "dev": "bun run --watch src/index.ts",
-    "build:css": "cd \"$(dirname \"$npm_package_json\")\" && ${BUN_INSTALL:-$HOME/.bun}/bin/bunx --bun @tailwindcss/cli -i src/alice/styles.css -o public/alice.css"
+    "test:e2e": "playwright test tests/e2e",
+    "build:css": "cd \"$(dirname \"$npm_package_json\")\" && ${BUN_INSTALL:-$HOME/.bun}/bin/bunx --bun @tailwindcss/cli -i src/alice/styles.css -o public/alice.css",
+    "build:chat": "cd src/chat && bun install && bun run build && mkdir -p ../../public/chat && cp -r .output/public/* ../../public/chat/"
   },
   "dependencies": {
     "@elysiajs/bearer": "^1.4.3",
+    "@elysiajs/cookie": "^0.8.0",
     "@elysiajs/cors": "^1.4.1",
     "@elysiajs/html": "^1.4.0",
     "@elysiajs/static": "^1.4.9",
     "@kitajs/html": "^4.2.13",
     "elysia": "latest",
+    "es-toolkit": "^1.46.1",
     "htmx.org": "^2.0.10",
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@tailwindcss/cli": "^4.2.4",
     "bun-types": "latest",
     "daisyui": "^5.5.19",
