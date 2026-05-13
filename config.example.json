@@ -1,10 +1,13 @@
 {
+  "$comment_apiKey": "Deprecated: auto-imported to api_keys table on startup",
   "port": 3000,
   "apiKey": "sk-change-me-in-production",
+  "$comment_ollamaUrl": "可选。不配置则跳过 Ollama 代理功能",
   "ollamaUrl": "http://127.0.0.1:11434",
   "logLevel": "info",
-  "logFile": "/var/log/alice-way/gateway.log",
-  "dbFile": "/var/lib/alice-way/alice.db",
+  "logFile": "./logs/alice.log",
+  "dbFile": "./data/alice.db",
+  "chatDbFile": "./data/chat.db",
   "modelAliases": {
     "gpt-4": "llama3.1:8b",
     "gpt-3.5-turbo": "qwen2.5:7b"

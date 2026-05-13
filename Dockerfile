@@ -50,11 +50,11 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/config.example.json ./
 
 # 创建日志和数据目录，赋予 appuser 写权限
-RUN mkdir -p /var/log/alice-way /var/lib/alice-way && \
-    chown -R appuser:appgroup /var/log/alice-way /var/lib/alice-way /app
+RUN mkdir -p /app/logs /app/data && \
+    chown -R appuser:appgroup /app/logs /app/data /app
 
 # 默认配置路径（可通过环境变量覆盖）
-ENV CONFIG_PATH=/etc/alice-way/config.json
+ENV CONFIG_PATH=/app/config.json
 
 EXPOSE 3000
 

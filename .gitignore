@@ -30,6 +30,7 @@ yarn-error.log*
 .env.development.local
 .env.test.local
 .env.production.local
+.env
 
 # vercel
 .vercel
@@ -53,6 +54,8 @@ package-lock.json
 .notes
 *.db
 .data/
+data/
+logs/
 
 *.log
 

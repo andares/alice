@@ -68,11 +68,12 @@ export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 export type Config = {
   port: number;
-  apiKey: string;
-  ollamaUrl: string;
+  apiKey?: string;
+  ollamaUrl?: string;
   logLevel: LogLevel;
   logFile: string;
   dbFile: string;
+  chatDbFile: string;
   modelAliases?: Record<string, string>;
 };
 

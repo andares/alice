@@ -4,7 +4,7 @@ import { Menu } from './components/menu';
 
 interface LayoutProps {
   children: JSX.Element;
-  activeMenu: 'status' | 'config' | 'logs';
+  activeMenu: 'status' | 'config' | 'logs' | 'api-keys' | 'router-models' | 'users';
   title: string;
 }
 
@@ -12,6 +12,9 @@ const menuItems = [
   { label: 'Status', href: '/alice', icon: '📊' },
   { label: 'Config', href: '/alice/config', icon: '⚙️' },
   { label: 'Logs', href: '/alice/logs', icon: '📝' },
+  { label: 'API Keys', href: '/alice/api-keys', icon: '🔑' },
+  { label: 'Models', href: '/alice/router-models', icon: '🤖' },
+  { label: 'Users', href: '/alice/users', icon: '👥' },
 ];
 
 /**

@@ -1,0 +1,24 @@
+[Unit]
+Description=Alice Way - Personal Agent Console
+After=network.target
+
+[Service]
+Type=simple
+User=alice
+Group=alice
+Environment="CONFIG_PATH=/etc/alice-way/config.json"
+ExecStart=/usr/local/bin/alice
+WorkingDirectory=/usr/local/bin
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# 安全加固
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/var/log/alice-way /var/lib/alice-way
+
+[Install]
+WantedBy=multi-user.target

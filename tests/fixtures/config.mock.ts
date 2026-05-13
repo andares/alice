@@ -1,7 +1,7 @@
 export const MOCK_API_KEY = "sk-change-me-in-production";
 export const MOCK_OLLAMA_URL = "http://127.0.0.1:11434";
 export const MOCK_LOG_LEVEL = "info" as const;
-export const MOCK_LOG_FILE = "/var/log/alice-way/gateway.log";
+export const MOCK_LOG_FILE = "./logs/alice.log";
 export const MOCK_DB_FILE = ":memory:";
 export const MOCK_PORT = 3000;
 

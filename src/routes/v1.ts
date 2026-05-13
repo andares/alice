@@ -1,38 +1,26 @@
 import { Elysia, t } from 'elysia';
-import { bearer } from '@elysiajs/bearer';
-import { unauthorizedError } from '../middleware/auth';
-import { chat, listModels, OllamaError } from '../services/ollama';
-import {
-  transformRequest,
-  transformResponse,
-  transformStream,
-  transformError,
-  transformModelList,
-} from '../transformers/openai';
+import type { Database } from 'bun:sqlite';
+import { authPlugin, unauthorizedError } from '../middleware/auth';
+import { listModels, OllamaError } from '../services/ollama';
+import { transformError } from '../transformers/openai';
 import { getDefaultLogger } from '../utils/logger';
-import { config } from '../config';
+import { routeToProvider } from '../services/router';
+import { listRouterModels } from '../foundation/router-models';
 import type { ChatCompletionRequest } from '../types';
 
-/**
- * v1 API 路由组
- *
- * 包含 OpenAI 兼容接口：
- * - POST /v1/chat/completions
- * - GET /v1/models
- *
- * 所有路由均启用认证守卫，并附带唯一 requestId。
- */
-export const v1Routes = new Elysia({ prefix: '/v1' })
-  .use(bearer())
-  .guard({
-    beforeHandle: ({ bearer: token, set }) => {
-      if (!token || token !== config.apiKey) {
-        set.status = 401;
-        set.headers['WWW-Authenticate'] = 'Bearer realm="api"';
-        return unauthorizedError('Invalid API Key', 'invalid_api_key');
-      }
-    },
-  }, (app) =>
+export function createV1Routes(db: Database) {
+  return new Elysia({ prefix: '/v1' })
+    .use(authPlugin(db))
+    .guard({
+      beforeHandle: (context) => {
+        if (!(context as unknown as { isAuthenticated: boolean }).isAuthenticated) {
+          const { set } = context;
+          set.status = 401;
+          set.headers['WWW-Authenticate'] = 'Bearer realm="api"';
+          return unauthorizedError('Invalid API Key', 'invalid_api_key');
+        }
+      },
+    }, (app) =>
     app
       // POST /v1/chat/completions
       .post(
@@ -53,80 +41,20 @@ export const v1Routes = new Elysia({ prefix: '/v1' })
           }
 
           try {
-            // 转换请求格式
-            const ollamaReq = transformRequest(req);
+            const response = await routeToProvider(db, req.model, req);
 
-            // 调用 Ollama
-            const ollamaResp = await chat(ollamaReq);
-
-            if (req.stream) {
-              // 流式响应：转换 NDJSON → SSE
-              const sseStream = transformStream(ollamaResp.body!, req.model);
-              logger.info('Chat completion (stream)', {
-                requestId,
-                model: req.model,
-                duration: Math.round(performance.now() - startTime),
-              });
-              return new Response(sseStream, {
-                headers: {
-                  'Content-Type': 'text/event-stream',
-                  'Cache-Control': 'no-cache',
-                  Connection: 'keep-alive',
-                },
-              });
-            }
-
-            // 非流式响应
-            const ollamaJson = await ollamaResp.json();
-            const openaiResp = transformResponse(ollamaJson, req.model);
+            // routeToProvider 返回的 Response 已经是最终格式
+            // 需要记录日志
             logger.info('Chat completion', {
               requestId,
               model: req.model,
               duration: Math.round(performance.now() - startTime),
             });
-            return openaiResp;
-          } catch (err) {
-            if (err instanceof OllamaError) {
-              // 504 超时、502 上游错误，其他状态码映射为 500
-              if (err.status === 504) {
-                set.status = 504;
-                logger.error('Ollama upstream timeout', {
-                  requestId,
-                  error: String(err),
-                });
-                return transformError(
-                  'Upstream request timed out',
-                  'upstream_timeout',
-                  'timeout',
-                );
-              }
-              if (err.status === 502) {
-                set.status = 502;
-                logger.error('Ollama upstream error', {
-                  requestId,
-                  error: String(err),
-                });
-                return transformError(
-                  'Upstream service error',
-                  'upstream_error',
-                  'upstream_failure',
-                );
-              }
-              // 其他 OllamaError（如 Ollama 返回 4xx/5xx）
-              set.status = 500;
-              logger.error('Ollama error', {
-                requestId,
-                error: String(err),
-                ollamaStatus: err.status,
-              });
-              return transformError(
-                'Internal server error',
-                'internal_error',
-                'internal_error',
-              );
-            }
 
-            // 未知错误
+            return response;
+          } catch (err) {
+            // routeToProvider 内部已处理所有错误并返回 Response，
+            // 此处仅捕获意外异常
             set.status = 500;
             logger.error('Unexpected error', {
               requestId,
@@ -175,9 +103,38 @@ export const v1Routes = new Elysia({ prefix: '/v1' })
         }
 
         try {
-          const tags = await listModels();
+          // 从 router_models 获取已配置的模型
+          const routerModels = listRouterModels(db);
+          const routerModelList = routerModels
+            .filter((m) => m.name !== '__default__')
+            .map((m) => ({
+              id: m.name,
+              object: 'model' as const,
+              created: m.created_at,
+              owned_by: 'alice-router',
+            }));
+
+          // 从 Ollama 获取原生模型列表
+          let ollamaModelList: Array<{ id: string; object: 'model'; created: number; owned_by: string }> = [];
+          try {
+            const tags = await listModels();
+            ollamaModelList = (tags.models ?? []).map((m) => ({
+              id: m.name,
+              object: 'model' as const,
+              created: Math.floor(new Date(m.modified_at).getTime() / 1000),
+              owned_by: 'ollama',
+            }));
+          } catch {
+            // Ollama 不可达时仍返回 router_models
+            logger.warn('Ollama unreachable, returning router models only', { requestId });
+          }
+
+          // 合并去重（router_models 优先）
+          const routerIds = new Set(routerModelList.map((m) => m.id));
+          const merged = [...routerModelList, ...ollamaModelList.filter((m) => !routerIds.has(m.id))];
+
           logger.info('List models', { requestId });
-          return transformModelList(tags);
+          return { object: 'list', data: merged };
         } catch (err) {
           if (err instanceof OllamaError) {
             set.status = err.status === 504 ? 504 : 502;
@@ -205,3 +162,4 @@ export const v1Routes = new Elysia({ prefix: '/v1' })
         }
       }),
   );
+}

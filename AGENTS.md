@@ -2,22 +2,27 @@
 
 ## 项目概况
 
-**Alice Way** 是一个基于 **Bun** 运行时和 **ElysiaJS** 框架的 **LLM Portal** 服务，其中包括了对`Ollama`转发`Open AI API`的支持。
+**Alice Way** 是一个基于 **Bun** 运行时和 **ElysiaJS** 框架的 **个人代理控制台**，支持多后端模型路由（Ollama、OpenAI 等）。
 
-**包括目标**：安全暴露内网 Ollama 服务到公网，提供 OpenAI 兼容的 API 接口，避免直接暴露 Ollama 原生端口（11434）。任何支持 OpenAI API 的客户端（如 Claude CLI、LangChain、Continue 等）均可直接接入。
+**核心目标**：通过 Router 层统一调度多个 LLM 后端，提供 OpenAI 兼容的 API 接口和完整的对话管理、用户体系、管理员控制台。任何支持 OpenAI API 的客户端（如 Claude CLI、LangChain、Continue 等）均可直接接入。
 
 **典型部署架构**：
 ```
-客户端 → HTTPS + API Key → 公网 VPS(Alice:3000) → frp 内网穿透 → 内网 Ollama(11434)
+客户端 → HTTPS + API Key → 公网 VPS(Alice:3000) → Router → 多后端（Ollama / OpenAI / ...）
 ```
 
 **核心特性**：
-- OpenAI 兼容端点：`/v1/chat/completions`（支持流式 SSE）、`/v1/models`
+- **Router 多模型路由**：统一调度多个 LLM 后端，支持模型别名映射、负载均衡、故障转移
+- **Chat 对话管理**：会话持久化、消息历史、多轮对话管理（SQLite）
+- **Alice Dashboard**：内置 Web 管理面板（状态页、配置页、请求日志页）
+- OpenAI 兼容端点：`/v1/chat/completions`（支持流式 SSE）、`/v1/models`（保留向后兼容）
 - Bearer Token 认证（API Key）
 - JSON 配置文件驱动：端口、密钥、后端地址、日志级别、模型别名映射
 - 异步双输出日志：控制台（带颜色）+ 文件日志（`Bun.file().writer()`）
 - 编译为单二进制文件部署，systemd 服务管理（开机自启、自动重启）
 - 内存占用极低（~20MB），启动毫秒级
+
+> **Ollama 转发**：作为可选后端之一保留，`ollamaUrl` 在配置中为可选字段。Router 层可路由至任意 OpenAI 兼容后端。
 
 ## 技术栈
 
@@ -43,7 +48,7 @@
 src/
   index.ts              # 主应用入口（Elysia 组装、CORS、错误处理、优雅关闭）
   config.ts             # 配置加载与 Zod 校验（使用 Bun.file()）
-  types.ts              # OpenAI/Ollama API 类型定义
+  types.ts              # OpenAI/Router API 类型定义
   utils/
     logger.ts           # 异步双输出日志（Bun.file().writer()）
   middleware/
@@ -170,7 +175,7 @@ if (typeof Bun !== 'undefined') {
 | `config.example.json` | 配置文件示例（复制到 `/etc/alice-way/config.json`），包含 `dbFile` 配置项 |
 | `build.sh` | 编译为独立二进制（`bun build --compile`） |
 | `install.sh` | 安装为 systemd 服务（需 root） |
-| `ollama-gateway.service` | systemd 服务模板 |
+| `alice.service` | systemd 服务模板 |
 | `Dockerfile` | 多阶段构建镜像 |
 | `.dockerignore` | 构建排除规则 |
 | `docker-compose.yml` | Docker 容器编排 |
@@ -182,7 +187,7 @@ if (typeof Bun !== 'undefined') {
 - **SQLite WAL 模式**: 数据库使用 WAL 模式以支持并发写入
 - **请求/响应体截断**: 超过 10KB 的请求/响应体会被截断存储
 - **访问路径**:
-  - `/alice` — 状态页（Ollama 健康检查 + 模型列表）
+  - `/alice` — 状态页（后端健康检查 + 模型列表）
   - `/alice/config` — 配置查看页（只读，API key 已脱敏）
   - `/alice/logs` — 请求日志页（分页表格，点击行显示 JSON 详情弹窗）
 - **日志分页**: 每页 30 条，最多 50 页
@@ -192,7 +197,12 @@ if (typeof Bun !== 'undefined') {
 - **不使用 `--minify`**：会导致 Elysia 运行时崩溃，使用 `--minify-whitespace --minify-syntax` 替代
 - **`@elysiajs/bearer` 必须标记为 `--external`**：否则编译后认证失效
 - **目标机器需支持 AVX2**：Bun 编译后的二进制有此硬件要求
-- **开发模式**：使用 `CONFIG_PATH=./config.example.json bun run dev` 启动（避免 /var/log 权限问题）
+- **二进制名称**：编译输出为 `alice`（非 `ollama-gateway`）
+- **开发模式**：直接 `bun run dev`，Bun 自动加载 CWD 下的 `.env` 文件
+- **配置路径优先级**（三级回退）：
+  1. 环境变量 `CONFIG_PATH`（最高优先级）
+  2. 系统路径 `/etc/alice-way/config.json`
+  3. 本地路径 `./config.json`（若不存在则自动创建）
 
 ## 实现规范（通用）
 

@@ -10,7 +10,7 @@ const chatConfig = {
   apiKey: 'sk-test',
   ollamaUrl: 'http://127.0.0.1:11434',
   logLevel: 'info' as const,
-  logFile: '/var/log/test.log',
+  logFile: './logs/test.log',
   dbFile: ':memory:',
   chatDbFile: ':memory:',
   modelAliases: {} as Record<string, string>,

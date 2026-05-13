@@ -53,8 +53,8 @@ describe('ConfigPage', () => {
     apiKey: 'sk***xx',
     ollamaUrl: 'http://127.0.0.1:11434',
     logLevel: 'info',
-    logFile: '/var/log/alice-way/gateway.log',
-    dbFile: '/var/lib/alice-way/alice.db',
+    logFile: './logs/alice.log',
+    dbFile: './data/alice.db',
   };
 
   it('contains configuration fields', () => {
@@ -79,7 +79,7 @@ describe('ConfigPage', () => {
   it('contains dbFile field', () => {
     const html = ConfigPage({ config: mockConfig });
     expect(html).toContain('DB File');
-    expect(html).toContain('/var/lib/alice-way/alice.db');
+    expect(html).toContain('./data/alice.db');
   });
 });
 

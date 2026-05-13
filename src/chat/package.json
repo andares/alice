@@ -1,0 +1,27 @@
+{
+  "name": "alice-chat",
+  "type": "module",
+  "scripts": {
+    "dev": "bunx --bun vinxi dev",
+    "build": "bunx --bun vinxi build",
+    "preview": "bunx --bun vinxi preview"
+  },
+  "dependencies": {
+    "@selemondev/shiki-transformer-copy-button": "^1.1.0",
+    "@solidjs/router": "^0.16.1",
+    "@solidjs/start": "^1.3.2",
+    "es-toolkit": "^1.46.1",
+    "lucide-solid": "^0.511.0",
+    "shiki": "^3.6.0",
+    "solid-js": "^1.9.12",
+    "solid-markdown": "^2.1.1",
+    "solid-streamdown": "^1.0.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.2.4",
+    "daisyui": "^5.0.35",
+    "tailwindcss": "^4.1.7",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  }
+}

@@ -6,13 +6,15 @@
 
 ## 运行 E2E 测试
 
-### 完整运行（需要 Ollama）
+### 完整运行（如配置了 Ollama）
 
 ```bash
 bun run test:e2e
 ```
 
-### 跳过 Ollama 依赖测试
+> **提示**: Bun 会自动加载项目根目录下的 `.env` 文件。可通过 `CONFIG_PATH` 环境变量指定配置文件路径，例如 `CONFIG_PATH=./config.local.json bun run test:e2e`。
+
+### 跳过 Ollama 依赖测试（本地开发推荐）
 
 ```bash
 SKIP_OLLAMA=1 bun run test:e2e
@@ -71,7 +73,7 @@ async function loginAndGoToChat(page: Page) {
 }
 ```
 
-### 标记 Ollama 依赖测试
+### 标记 Ollama 依赖测试（如已配置）
 
 依赖 Ollama 的测试需要添加条件跳过标记：
 

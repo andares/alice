@@ -1,8 +1,8 @@
-# Alice Way
+# Alice Way — Personal Agent Console
 
-> A lightweight, production-ready **Ollama Gateway** with OpenAI-compatible API.
+> A lightweight personal LLM agent console with OpenAI-compatible API and multi-model routing.
 
-**Alice Way** exposes your local [Ollama](https://ollama.com) instance through a secure, OpenAI-compatible HTTP API. Any client that supports the OpenAI API — Claude CLI, LangChain, Continue.dev, ChatGPT-Next-Web, etc. — can connect to your self-hosted models without exposing Ollama's native port (11434) directly.
+**Alice Way** provides a secure, OpenAI-compatible HTTP API for your personal AI agents. Connect any OpenAI-compatible client — Claude CLI, LangChain, Continue.dev, ChatGPT-Next-Web, etc. — to your local models through a single, configurable gateway. Ollama is one supported backend, but the Router system enables multi-model routing across various providers.
 
 ---
 
@@ -18,18 +18,14 @@ bun install
 
 ### 2. Configure
 
-Copy the example config and edit the API key:
+The application auto-creates `./config.json` with minimal defaults if no config is found. For customization, copy the example and edit:
 
 ```bash
-cp config.example.json /etc/alice-way/config.json
-# Edit /etc/alice-way/config.json and set a strong apiKey
+cp config.example.json ./config.json
+# Edit ./config.json and set your apiKey and backend preferences
 ```
 
-Or use a local config for development:
-
-```bash
-CONFIG_PATH=./config.example.json bun run dev
-```
+Bun automatically loads `.env` from the current working directory, so you can also set environment variables for quick testing.
 
 ### 3. Run
 
@@ -38,10 +34,10 @@ CONFIG_PATH=./config.example.json bun run dev
 bun run dev
 
 # Production
-CONFIG_PATH=/etc/alice-way/config.json bun run src/index.ts
+bun run src/index.ts
 ```
 
-The gateway listens on the port configured in `config.json` (default: **3000**).
+The console listens on the port configured in `config.json` (default: **3000**). No `CONFIG_PATH` needed in development — the app looks for `./config.json` by default.
 
 ---
 
@@ -83,8 +79,10 @@ curl -N -X POST http://localhost:3000/v1/chat/completions \
 
 ```bash
 curl http://localhost:3000/health
-# {"status":"ok","ollama":"reachable"}
+# {"status":"ok","ollama":"not_configured"}
 ```
+
+When Ollama is not configured, the health check reports `ollama: "not_configured"` while the service remains fully operational for other backends.
 
 ---
 
@@ -96,11 +94,13 @@ curl http://localhost:3000/health
 |-------|------|---------|-------------|
 | `port` | number | `3000` | HTTP server port |
 | `apiKey` | string | — | Bearer token for API authentication |
-| `ollamaUrl` | string | `http://127.0.0.1:11434` | Ollama base URL |
+| `ollamaUrl` | string | *optional* | Ollama base URL (leave unset to disable) |
 | `logLevel` | string | `info` | Log verbosity: `debug`, `info`, `warn`, `error` |
-| `logFile` | string | `/var/log/alice-way/gateway.log` | Log file path |
-| `dbFile` | string | `/var/lib/alice-way/alice.db` | SQLite database path for request logs |
-| `modelAliases` | object | `{}` | Map OpenAI model names to Ollama model names |
+| `logFile` | string | `./logs/gateway.log` | Log file path (local by default) |
+| `dbFile` | string | `./data/alice.db` | SQLite database for request logs (local by default) |
+| `modelAliases` | object | `{}` | Map client model names to backend model names |
+
+**Note**: `ollamaUrl` is optional. The console starts and serves requests even without Ollama configured, routing to other configured backends.
 
 **Example `modelAliases`**:
 
@@ -113,13 +113,69 @@ curl http://localhost:3000/health
 
 ---
 
+## Architecture
+
+```
+Client (OpenAI API) → HTTPS → Alice Router (port 3000) → Backend (Ollama, etc.)
+```
+
+The Router is the primary traffic path, enabling multi-model routing across different AI providers. Ollama is one supported backend among many.
+
+Typical production setup with reverse proxy:
+
+```
+Internet → Nginx/Caddy (HTTPS, 443) → Alice (3000, localhost) → Backend (Ollama, etc.)
+```
+
+### Admin Dashboard (/alice)
+
+Alice includes a built-in admin dashboard at `/alice` for operational visibility:
+
+- **Status page** — Backend health check and loaded models
+- **Config page** — Read-only view of current configuration (API key masked)
+- **Logs page** — Request/response history with pagination and JSON detail view
+
+The dashboard is built with **HTMX**, **Tailwind CSS v4**, and **DaisyUI 5**. Request logs are stored in a local **SQLite** database (configurable via `dbFile`). The dashboard has no built-in authentication; protect it with your reverse proxy (e.g., nginx HTTP Basic Auth) in production.
+
+Alice styles are generated from `src/alice/styles.css` into
+`public/alice.css` using:
+
+```bash
+bun run build:css
+```
+
+The build runs fully under Bun: it resolves the repository root from
+`npm_package_json` and executes the Tailwind CLI through `bunx --bun`, so it
+does not depend on a separate Node.js runtime when invoked from `bun run`.
+
+---
+
+## Features
+
+- **OpenAI-compatible API** — `/v1/chat/completions` (streaming & non-streaming), `/v1/models`
+- **Bearer Token authentication** — simple API key protection
+- **JSON configuration** — no code changes needed for deployment
+- **Async dual-output logging** — colored console + file logs
+- **Single binary deployment** — compile once, deploy anywhere (Bun `--compile`)
+- **Graceful shutdown** — SIGTERM/SIGINT handling
+- **Multi-model routing** — Router-based backend selection, Ollama as one option
+- **Model aliasing** — transparently map client model names to backend models
+- **Upstream health check** — `/health` endpoint reports backend connectivity
+- **Admin Dashboard (/alice)** — Web UI for monitoring, config viewing, and request logs
+- **Zero-config startup** — auto-creates `./config.json` with sensible defaults
+- **`.env` support** — Bun auto-loads environment variables from CWD
+
+---
+
 ## Deploy as systemd Service
+
+> For system-level deployment. For local development, use `bun run dev`.
 
 ### 1. Compile to Single Binary
 
 ```bash
 ./build.sh
-# Produces: ./ollama-gateway
+# Produces: ./alice
 ```
 
 `./build.sh` also rebuilds the Alice dashboard stylesheet before compiling the
@@ -133,21 +189,21 @@ sudo ./install.sh
 
 This will:
 - Create a system user `alice-way`
-- Install the binary to `/usr/local/bin/alice-way`
+- Install the binary to `/usr/local/bin/alice`
 - Install config to `/etc/alice-way/config.json`
 - Install and enable the systemd service
 
 ### 3. Start
 
 ```bash
-sudo systemctl start alice-way
-sudo systemctl enable alice-way   # auto-start on boot
+sudo systemctl start alice
+sudo systemctl enable alice   # auto-start on boot
 ```
 
 ### 4. View Logs
 
 ```bash
-sudo journalctl -u alice-way -f
+sudo journalctl -u alice -f
 # or
 sudo tail -f /var/log/alice-way/gateway.log
 ```
@@ -176,7 +232,7 @@ cp config.example.json config.json
 docker compose up -d
 ```
 
-The gateway will be available at `http://localhost:3000`.
+The console will be available at `http://localhost:3000`.
 
 ### 3. View Logs
 
@@ -196,8 +252,8 @@ Docker volumes persist data across container restarts:
 
 | Volume | Host Path | Container Path | Purpose |
 |--------|-----------|----------------|---------|
-| `./data` | `./data` | `/app/.data` | SQLite database for request logs |
-| `./logs` | `./logs` | `/app/.log` | Application log files |
+| `./data` | `./data` | `/app/data` | SQLite database for request logs |
+| `./logs` | `./logs` | `/app/logs` | Application log files |
 
 To persist data on a different host path, edit `docker-compose.yml` and modify the volume mappings.
 
@@ -219,7 +275,7 @@ bun test
 bun test --coverage
 ```
 
-Target line coverage: **≥ 90%** (currently **92.57%**).
+Target line coverage: **≥ 90%**.
 
 ### Run Specific Test Suites
 
@@ -252,61 +308,12 @@ Runs Playwright end-to-end tests against the running application.
 
 ---
 
-## Architecture
-
-```
-Client (OpenAI API) → HTTPS → Alice (port 3000) → Ollama (port 11434)
-```
-
-Typical production setup with reverse proxy:
-
-```
-Internet → Nginx/Caddy (HTTPS, 443) → Alice (3000, localhost) → Ollama (11434)
-```
-
-### Admin Dashboard (/alice)
-
-Alice includes a built-in admin dashboard at `/alice` for operational visibility:
-
-- **Status page** — Ollama health check and loaded models
-- **Config page** — Read-only view of current configuration (API key masked)
-- **Logs page** — Request/response history with pagination and JSON detail view
-
-The dashboard is built with **HTMX**, **Tailwind CSS v4**, and **DaisyUI 5**. Request logs are stored in a local **SQLite** database (configurable via `dbFile`). The dashboard has no built-in authentication; protect it with your reverse proxy (e.g., nginx HTTP Basic Auth) in production.
-
-Alice styles are generated from `src/alice/styles.css` into
-`public/alice.css` using:
-
-```bash
-bun run build:css
-```
-
-The build runs fully under Bun: it resolves the repository root from
-`npm_package_json` and executes the Tailwind CLI through `bunx --bun`, so it
-does not depend on a separate Node.js runtime when invoked from `bun run`.
-
----
-
-## Features
-
-- **OpenAI-compatible API** — `/v1/chat/completions` (streaming & non-streaming), `/v1/models`
-- **Bearer Token authentication** — simple API key protection
-- **JSON configuration** — no code changes needed for deployment
-- **Async dual-output logging** — colored console + rotating file logs
-- **Single binary deployment** — compile once, deploy anywhere (Bun `--compile`)
-- **Graceful shutdown** — SIGTERM/SIGINT handling
-- **Model aliasing** — transparently map client model names to Ollama models
-- **Upstream health check** — `/health` endpoint reports Ollama connectivity
-- **Admin Dashboard (/alice)** — Web UI for monitoring, config viewing, and request logs
-
----
-
 ## Requirements
 
 - [Bun](https://bun.sh) >= 1.0 (for development & compilation)
-- [Ollama](https://ollama.com) running and accessible
-- Linux with systemd (for service deployment)
+- Linux with systemd (for service deployment, optional)
 - AVX2 CPU support (for compiled binary)
+- Ollama (optional, only if using Ollama as backend)
 
 ---
 

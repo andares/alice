@@ -16,7 +16,7 @@
 
 1. **路由挂载顺序**: `/alice` 在 `authPlugin` 之前挂载，绕过 API Key 认证
 2. **请求日志**: 使用全局 `onAfterHandle`/`onError` 钩子而非 Elysia 插件，确保所有 `/v1/*` 请求都被记录
-3. **日志降级**: `/var/log` 无权限时降级到 `.log/`，`/var/lib/alice-way` 无权限时降级到 `.data/`
+3. **日志降级**: 日志文件默认在 `./logs/`，数据库默认在 `./data/`
 4. **请求日志记录**: Elysia `onAfterHandle` 中的 `body` 为解析后的请求体，`response` 为路由返回值；非流式 `/v1/*` 请求会同时记录 `request_body` 与 `response_body`
 5. **异常与流式限制**: `onError` 可记录大多数异常请求的 `request_body` 与错误响应体，但验证失败时仅能拿到 Elysia 当前保留的 `body`；SSE/原生 `Response` 流式响应仍无法持久化响应体，`response_body` 为 null
 6. **编译部署**: `bun build --compile` 不嵌入 `public/` 目录，`install.sh` 需要复制静态资源到二进制同目录

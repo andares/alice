@@ -8,10 +8,10 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # 配置路径
-BIN_SOURCE="./ollama-gateway"
+BIN_SOURCE="./alice"
 CONFIG_SOURCE="./config.example.json"
-SERVICE_SOURCE="./ollama-gateway.service"
-BIN_DEST="/usr/local/bin/alice-way"
+SERVICE_SOURCE="./alice.service"
+BIN_DEST="/usr/local/bin/alice"
 CONFIG_DEST="/etc/alice-way/config.json"
 LOG_DIR="/var/log/alice-way"
 USER="alice"
